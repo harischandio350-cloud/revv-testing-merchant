@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import toast, { Toaster } from 'react-hot-toast'
 import './App.css'
 
 interface Service {
@@ -6,15 +7,17 @@ interface Service {
   name: string
   description: string
   price: number
+  mccCode: string
+  merchantType: string
 }
 
 const services: Service[] = [
-  { id: '1', name: 'Oil Change', description: 'Full synthetic oil change', price: 49.99 },
-  { id: '2', name: 'Brake Repair', description: 'Brake pads replacement', price: 299.99 },
-  { id: '3', name: 'Tire Rotation', description: 'All four tires', price: 39.99 },
-  { id: '4', name: 'Body Paint', description: 'Professional paint job', price: 1499.99 },
-  { id: '5', name: 'Dent Removal', description: 'Minor dent repair', price: 199.99 },
-  { id: '6', name: 'Full Inspection', description: 'Complete vehicle inspection', price: 89.99 },
+  { id: '1', name: 'Body Paint', description: 'Professional paint job', price: 1499.99, mccCode: '7531', merchantType: 'Auto Body Repair Shops' },
+  { id: '2', name: 'Dent Removal', description: 'Minor dent repair', price: 199.99, mccCode: '7531', merchantType: 'Auto Body Repair Shops' },
+  { id: '3', name: 'Premium Tires', description: 'Set of 4 premium tires', price: 799.99, mccCode: '5532', merchantType: 'Automotive Tire Stores' },
+  { id: '4', name: 'Tire Rotation', description: 'All four tires rotated and balanced', price: 39.99, mccCode: '5532', merchantType: 'Automotive Tire Stores' },
+  { id: '5', name: 'Oil Change', description: 'Full synthetic oil change', price: 49.99, mccCode: '7538', merchantType: 'Auto Service Shops' },
+  { id: '6', name: 'Brake Repair', description: 'Brake pads replacement', price: 299.99, mccCode: '7538', merchantType: 'Auto Service Shops' },
 ]
 
 function App() {
@@ -71,16 +74,19 @@ function App() {
     e.preventDefault()
     
     if (selectedServices.length === 0) {
-      alert('Please select at least one service')
+      toast.error('Please select at least one service')
       return
     }
 
     if (!cardNumber || !cardName || !expiryDate || !cvv) {
-      alert('Please fill in all card details')
+      toast.error('Please fill in all card details')
       return
     }
 
     setProcessing(true)
+    
+    // Show processing toast
+    const toastId = toast.loading('Processing payment...')
     
     try {
       // Parse expiry date (MM/YY)
@@ -89,12 +95,16 @@ function App() {
       // Remove spaces from card number
       const cleanCardNumber = cardNumber.replace(/\s/g, '')
       
+      // Get the MCC code from the first selected service
+      const firstSelectedService = services.find(s => selectedServices.includes(s.id))
+      const mccCode = firstSelectedService?.mccCode || '7531'
+      
       // Prepare payment payload
       const payload = {
         cardNumber: cleanCardNumber,
         cvv: cvv,
         amount: calculateTotal(),
-        mccCode: "7531", // Auto body repair shop MCC code
+        mccCode: mccCode,
         expiryMonth: expiryMonth,
         expiryYear: expiryYear
       }
@@ -111,20 +121,39 @@ function App() {
 
       const data = await response.json()
       
-      if (response.ok) {
-        alert(`Payment of $${calculateTotal().toFixed(2)} processed successfully!\n\nResponse: ${JSON.stringify(data, null, 2)}`)
-        // Reset form
+      toast.dismiss(toastId)
+      
+      console.log('Payment response:', data)
+      
+      // Check the status field in the response body
+      if (data.status === 'APPROVED') {
+        toast.success(
+          `Payment Approved!\n${data.responseMessage || `Amount: $${calculateTotal().toFixed(2)}`}`,
+          {
+            duration: 5000,
+          }
+        )
+        // Reset form on success
         setSelectedServices([])
         setCardNumber('')
         setCardName('')
         setExpiryDate('')
         setCvv('')
       } else {
-        alert(`Payment failed: ${data.message || 'Unknown error'}\n\nDetails: ${JSON.stringify(data, null, 2)}`)
+        // Payment declined or failed
+        toast.error(
+          `Payment ${data.status || 'Failed'}\n${data.responseMessage || 'Unknown error'}`,
+          {
+            duration: 6000,
+          }
+        )
       }
     } catch (error) {
       console.error('Payment error:', error)
-      alert(`Payment error: ${error instanceof Error ? error.message : 'Network error occurred'}`)
+      toast.dismiss(toastId)
+      toast.error(`Payment error: ${error instanceof Error ? error.message : 'Network error occurred'}`, {
+        duration: 6000,
+      })
     } finally {
       setProcessing(false)
     }
@@ -134,54 +163,83 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-6xl mx-auto p-6">
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          success: {
+            style: {
+              background: '#10b981',
+              color: '#fff',
+              maxWidth: '90vw',
+            },
+          },
+          error: {
+            style: {
+              background: '#ef4444',
+              color: '#fff',
+              maxWidth: '90vw',
+            },
+          },
+          loading: {
+            style: {
+              background: '#3b82f6',
+              color: '#fff',
+              maxWidth: '90vw',
+            },
+          },
+        }}
+      />
+      <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6">
         {/* Header */}
-        <header className="text-center mb-12 pt-8">
-          <h1 className="text-5xl font-bold text-white mb-3">
+        <header className="text-center mb-8 sm:mb-12 pt-4 sm:pt-8">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-2 sm:mb-3">
             🔧 RevvAuto Shop
           </h1>
-          <p className="text-slate-300 text-lg">
+          <p className="text-slate-300 text-base sm:text-lg px-4">
             Professional Auto Body Repair & Maintenance
           </p>
         </header>
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
           {/* Services Section */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-slate-800 mb-6">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 lg:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-4 sm:mb-6">
               Select Services
             </h2>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {services.map(service => (
                 <div
                   key={service.id}
                   onClick={() => toggleService(service.id)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all duration-200 border-2 ${
+                  className={`p-3 sm:p-4 rounded-lg sm:rounded-xl cursor-pointer transition-all duration-200 border-2 ${
                     selectedServices.includes(service.id)
                       ? 'border-blue-500 bg-blue-50 shadow-md'
                       : 'border-slate-200 hover:border-slate-300 hover:shadow'
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         <input
                           type="checkbox"
                           checked={selectedServices.includes(service.id)}
                           onChange={() => {}}
-                          className="w-5 h-5 rounded accent-blue-500"
+                          className="w-4 h-4 sm:w-5 sm:h-5 rounded accent-blue-500 flex-shrink-0"
                         />
-                        <div>
-                          <h3 className="font-semibold text-slate-800 text-lg">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-slate-800 text-base sm:text-lg">
                             {service.name}
                           </h3>
-                          <p className="text-slate-600 text-sm">
+                          <p className="text-slate-600 text-xs sm:text-sm">
                             {service.description}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 sm:mt-1">
+                            {service.merchantType} (MCC: {service.mccCode})
                           </p>
                         </div>
                       </div>
                     </div>
-                    <span className="font-bold text-blue-600 text-lg ml-4">
+                    <span className="font-bold text-blue-600 text-base sm:text-lg ml-2 flex-shrink-0">
                       ${service.price.toFixed(2)}
                     </span>
                   </div>
@@ -190,10 +248,10 @@ function App() {
             </div>
 
             {/* Total */}
-            <div className="mt-8 pt-6 border-t-2 border-slate-200">
+            <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t-2 border-slate-200">
               <div className="flex justify-between items-center">
-                <span className="text-2xl font-bold text-slate-800">Total:</span>
-                <span className="text-3xl font-bold text-blue-600">
+                <span className="text-xl sm:text-2xl font-bold text-slate-800">Total:</span>
+                <span className="text-2xl sm:text-3xl font-bold text-blue-600">
                   ${total.toFixed(2)}
                 </span>
               </div>
@@ -201,11 +259,11 @@ function App() {
           </div>
 
           {/* Payment Section */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-slate-800 mb-6">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 lg:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-4 sm:mb-6">
               Payment Details
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Card Number */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -216,7 +274,7 @@ function App() {
                   value={cardNumber}
                   onChange={handleCardNumberChange}
                   placeholder="1234 5678 9012 3456"
-                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-base sm:text-lg"
                   required
                 />
               </div>
@@ -231,13 +289,13 @@ function App() {
                   value={cardName}
                   onChange={(e) => setCardName(e.target.value)}
                   placeholder="John Doe"
-                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-base sm:text-lg"
                   required
                 />
               </div>
 
               {/* Expiry and CVV */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Expiry Date
@@ -247,7 +305,7 @@ function App() {
                     value={expiryDate}
                     onChange={handleExpiryChange}
                     placeholder="MM/YY"
-                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-base sm:text-lg"
                     required
                   />
                 </div>
@@ -260,7 +318,7 @@ function App() {
                     value={cvv}
                     onChange={handleCvvChange}
                     placeholder="123"
-                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-base sm:text-lg"
                     required
                   />
                 </div>
@@ -270,7 +328,7 @@ function App() {
               <button
                 type="submit"
                 disabled={processing}
-                className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
+                className={`w-full py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-all duration-200 ${
                   processing
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95 shadow-lg hover:shadow-xl'
@@ -309,10 +367,10 @@ function App() {
             </form>
 
             {/* Security Badge */}
-            <div className="mt-6 pt-6 border-t border-slate-200">
+            <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-slate-200">
               <div className="flex items-center justify-center gap-2 text-slate-600">
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 h-4 sm:w-5 sm:h-5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -324,14 +382,14 @@ function App() {
                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                   />
                 </svg>
-                <span className="text-sm">Secure Payment Gateway</span>
+                <span className="text-xs sm:text-sm">Secure Payment Gateway</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <footer className="text-center mt-12 text-slate-400 text-sm">
+        <footer className="text-center mt-8 sm:mt-12 pb-6 text-slate-400 text-xs sm:text-sm px-4">
           <p>© 2025 RevvAuto Shop. All rights reserved.</p>
         </footer>
       </div>
